@@ -1,0 +1,11 @@
+{
+  "name": "property-notes-pwa",
+  "version": "1.0.0",
+  "description": "Property Notes PWA",
+  "scripts": {
+    "build": "echo 'No build step required'"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

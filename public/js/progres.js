@@ -1,0 +1,533 @@
+// PROGRES PAGE - MOBILE-FIRST
+
+const openMenuBtn = document.getElementById("openMenuBtn");
+const menuBottomSheet = document.getElementById("menuBottomSheet");
+const closeMenuBtn = document.getElementById("closeMenuBtn");
+const closeMenuBtn2 = document.getElementById("closeMenuBtn2");
+const openFormBtn = document.getElementById("openFormBtn");
+const formBottomSheet = document.getElementById("formBottomSheet");
+const closeFormBtn = document.getElementById("closeFormBtn");
+const closeFormBtn2 = document.getElementById("closeFormBtn2");
+const unitSelectModal = document.getElementById("unitSelectModal");
+const progresFormModal = document.getElementById("progresFormModal");
+const progresList = document.getElementById("progresList");
+const emptyState = document.getElementById("emptyState");
+const formTitle = document.getElementById("formTitle");
+
+let allProgres = [];
+let allUnits = [];
+let currentEditProgresId = null;
+let countdownIntervals = new Map(); // Store intervals for cleanup
+
+// Format mata uang mengikuti pengaturan global
+function formatCurrency(value, currency = getCurrentCurrency()) {
+  if (!value || value === "" || value === 0) return "";
+  
+  let numValue;
+  if (typeof value === "number") {
+    numValue = value;
+  } else {
+    numValue = parseFloat(value.toString().replace(/[^\d]/g, ""));
+  }
+  
+  if (isNaN(numValue) || numValue === 0) return "";
+
+  if (currency === "id") {
+    return `Rp ${numValue.toLocaleString("id-ID")}`;
+  } else {
+    return `$${numValue.toLocaleString("en-US")}`;
+  }
+}
+
+// Parse mata uang ke angka
+function parseCurrency(value) {
+  if (!value) return 0;
+  const numValue = parseFloat(value.toString().replace(/[^\d]/g, ""));
+  return isNaN(numValue) ? 0 : numValue;
+}
+
+// Calculate countdown and progress
+function calculateCountdown(checkIn, checkOut) {
+  const now = new Date();
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+  
+  // Calculate time remaining until check out
+  const timeRemaining = checkOutDate - now;
+  
+  // Calculate total duration
+  const totalDuration = checkOutDate - checkInDate;
+  
+  // Calculate progress percentage (0% at check in, 100% at check out)
+  let progress = 0;
+  if (now < checkInDate) {
+    progress = 0; // Before check in
+  } else if (now >= checkOutDate) {
+    progress = 100; // After check out
+  } else {
+    const elapsed = now - checkInDate;
+    progress = (elapsed / totalDuration) * 100;
+  }
+  
+  // Format countdown
+  let countdownText = "";
+  if (timeRemaining <= 0) {
+    countdownText = "Sudah Check Out";
+  } else {
+    const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+    
+    if (days > 0) {
+      countdownText = `Sisa ${days} hari ${hours} jam`;
+    } else if (hours > 0) {
+      countdownText = `Sisa ${hours} jam ${minutes} menit`;
+    } else if (minutes > 0) {
+      countdownText = `Sisa ${minutes} menit ${seconds} detik`;
+    } else {
+      countdownText = `Sisa ${seconds} detik`;
+    }
+  }
+  
+  return {
+    countdown: countdownText,
+    progress: Math.min(100, Math.max(0, progress))
+  };
+}
+
+// Update countdown for a specific card
+function updateCountdown(cardId, checkIn, checkOut) {
+  const countdownEl = document.getElementById(`countdown-${cardId}`);
+  const progressBarEl = document.getElementById(`progress-bar-${cardId}`);
+  
+  if (!countdownEl || !progressBarEl) return;
+  
+  const { countdown, progress } = calculateCountdown(checkIn, checkOut);
+  
+  countdownEl.textContent = countdown;
+  progressBarEl.style.width = `${progress}%`;
+  
+  // Change color if progress is 100%
+  if (progress >= 100) {
+    progressBarEl.classList.add("completed");
+  } else {
+    progressBarEl.classList.remove("completed");
+  }
+}
+
+// Format input mata uang
+function setupCurrencyInput(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  input.addEventListener("input", (e) => {
+    const value = e.target.value;
+    const numValue = parseCurrency(value);
+    if (numValue > 0) {
+      const currency = getCurrentCurrency();
+      const formatted = formatCurrency(numValue, currency);
+      e.target.value = formatted;
+      // Jaga caret di akhir agar tidak meloncat di tengah prefix/sufiks
+      const endPos = formatted.length;
+      requestAnimationFrame(() => {
+        e.target.setSelectionRange(endPos, endPos);
+      });
+    } else {
+      e.target.value = "";
+    }
+  });
+
+  input.addEventListener("focus", (e) => {
+    const value = e.target.value;
+    if (value) {
+      const numValue = parseCurrency(value);
+      if (numValue > 0) {
+        e.target.value = numValue.toString();
+      }
+    }
+  });
+
+  input.addEventListener("blur", (e) => {
+    const value = e.target.value;
+    const numValue = parseCurrency(value);
+    if (numValue > 0) {
+      const currency = getCurrentCurrency();
+      e.target.value = formatCurrency(numValue, currency);
+    } else {
+      e.target.value = "";
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  await openDB();
+  
+  // Load units
+  await loadUnits();
+  
+  // Load progres
+  await loadProgres();
+  
+  // Setup currency inputs
+  setupCurrencyInput("pendapatanKotorModal");
+  setupCurrencyInput("pendapatanBersihModal");
+  setupCurrencyInput("komisiModal");
+  
+  // Load all progres
+  loadAllProgres();
+  
+  // Event listener untuk open menu
+  openMenuBtn.addEventListener("click", () => {
+    menuBottomSheet.classList.add("active");
+  });
+
+  // Event listener untuk close menu
+  closeMenuBtn.addEventListener("click", closeMenuBottomSheet);
+  closeMenuBtn2.addEventListener("click", closeMenuBottomSheet);
+  
+  menuBottomSheet.addEventListener("click", (e) => {
+    if (e.target === menuBottomSheet || e.target === closeMenuBtn) {
+      closeMenuBottomSheet();
+    }
+  });
+
+  // Event listener untuk open form
+  openFormBtn.addEventListener("click", () => {
+    currentEditProgresId = null;
+    formTitle.textContent = "Tambah Progres";
+    progresFormModal.reset();
+  
+    // 🔓 BUKA SPINNER UNIT UNTUK TAMBAH
+    unlockUnitSpinner();
+
+    // 🔓 CHECK-IN & CHECK-OUT BOLEH DIISI SAAT TAMBAH
+    unlockCheckInOut();
+
+
+    formBottomSheet.classList.add("active");
+  });
+  
+  
+  // Event listener untuk close form
+  closeFormBtn.addEventListener("click", closeFormBottomSheet);
+  closeFormBtn2.addEventListener("click", closeFormBottomSheet);
+  
+  formBottomSheet.addEventListener("click", (e) => {
+    if (e.target === formBottomSheet || e.target === closeFormBtn) {
+      closeFormBottomSheet();
+    }
+  });
+
+  // Event listener untuk form modal
+  progresFormModal.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await handleFormSubmit();
+  });
+});
+
+function closeMenuBottomSheet() {
+  menuBottomSheet.classList.remove("active");
+}
+
+function closeFormBottomSheet() {
+  formBottomSheet.classList.remove("active");
+  currentEditProgresId = null;
+  progresFormModal.reset();
+}
+
+async function loadUnits() {
+  allUnits = await getAllPropertiesFromDB();
+  
+  // Populate unit select modal
+  unitSelectModal.innerHTML = '<option value="">-- Pilih Unit --</option>';
+  
+  allUnits.forEach(unit => {
+    const option = document.createElement("option");
+    option.value = unit.id;
+    option.textContent = unit.name;
+    unitSelectModal.appendChild(option);
+  });
+}
+
+async function loadProgres() {
+  allProgres = await getAllProgresFromDB();
+}
+
+async function loadAllProgres() {
+  progresList.innerHTML = "";
+  
+  if (allProgres.length === 0) {
+    progresList.style.display = "none";
+    emptyState.style.display = "block";
+    return;
+  }
+  
+  progresList.style.display = "block";
+  emptyState.style.display = "none";
+  const currency = getCurrentCurrency();
+  
+  allProgres.forEach(progres => {
+    const card = document.createElement("div");
+    card.className = "progres-card";
+    
+    const checkInDate = new Date(progres.checkIn);
+    const checkOutDate = new Date(progres.checkOut);
+    
+    const checkInStr = checkInDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    
+    const checkOutStr = checkOutDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    
+    const unit = allUnits.find(u => u.id === progres.unitId);
+    const unitName = unit ? unit.name : "Unknown";
+    
+    // Calculate initial countdown
+    const { countdown, progress } = calculateCountdown(progres.checkIn, progres.checkOut);
+    
+    card.innerHTML = `
+      <div class="progres-card-header">
+        <h3 class="progres-card-title">${unitName}</h3>
+        <div class="progres-card-actions">
+          <button class="progres-card-edit" data-id="${progres.id}" aria-label="Edit">
+            ✏️
+          </button>
+          <button class="progres-card-delete" data-id="${progres.id}" aria-label="Hapus">
+            🗑️
+          </button>
+        </div>
+      </div>
+      <div class="progres-card-body">
+        <div class="progres-countdown-container">
+          <div class="progres-countdown" id="countdown-${progres.id}">${countdown}</div>
+          <div class="progres-progress-bar-container">
+            <div class="progres-progress-bar" id="progress-bar-${progres.id}" style="width: ${progress}%"></div>
+          </div>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Check In:</span>
+          <span class="progres-card-value">📅 ${checkInStr}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Check Out:</span>
+          <span class="progres-card-value">🕐 ${checkOutStr}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Pendapatan Kotor:</span>
+          <span class="progres-card-value">${formatCurrency(progres.pendapatanKotor, currency)}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Pendapatan Bersih:</span>
+          <span class="progres-card-value">${formatCurrency(progres.pendapatanBersih, currency)}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Komisi:</span>
+          <span class="progres-card-value">${formatCurrency(progres.komisi, currency)}</span>
+        </div>
+        ${progres.catatan ? `
+        <div class="progres-card-item">
+          <span class="progres-card-label">Catatan:</span>
+          <span class="progres-card-value">${progres.catatan}</span>
+        </div>
+        ` : ""}
+      </div>
+    `;
+    
+    // Edit button
+    const editBtn = card.querySelector(".progres-card-edit");
+    editBtn.addEventListener("click", () => {
+      editProgres(progres);
+    });
+    
+    // Delete button
+    const deleteBtn = card.querySelector(".progres-card-delete");
+    deleteBtn.addEventListener("click", async () => {
+      if (confirm("Apakah Anda yakin ingin menghapus data progres ini?")) {
+        // Clear interval before deleting
+        if (countdownIntervals.has(progres.id)) {
+          clearInterval(countdownIntervals.get(progres.id));
+          countdownIntervals.delete(progres.id);
+        }
+        await deleteProgresFromDB(progres.id);
+        await loadProgres();
+        loadAllProgres();
+      }
+    });
+    
+    // Setup countdown interval (update every second for accuracy)
+    const intervalId = setInterval(() => {
+      updateCountdown(progres.id, progres.checkIn, progres.checkOut);
+    }, 1000); // Update every second
+    
+    countdownIntervals.set(progres.id, intervalId);
+    
+    // Initial update
+    updateCountdown(progres.id, progres.checkIn, progres.checkOut);
+    
+    progresList.appendChild(card);
+  });
+  
+  // Clean up intervals for cards that no longer exist
+  const currentProgresIds = new Set(allProgres.map(p => p.id));
+  countdownIntervals.forEach((intervalId, progresId) => {
+    if (!currentProgresIds.has(progresId)) {
+      clearInterval(intervalId);
+      countdownIntervals.delete(progresId);
+    }
+  });
+}
+
+
+function lockUnitSpinner() {
+  const unitSelect = document.getElementById("unitSelectModal");
+  if (!unitSelect) return;
+
+  unitSelect.disabled = true;
+  unitSelect.classList.add("progres-lock");
+}
+
+function unlockUnitSpinner() {
+  const unitSelect = document.getElementById("unitSelectModal");
+  if (!unitSelect) return;
+
+  unitSelect.disabled = false;
+  unitSelect.classList.remove("progres-lock");
+}
+
+
+
+
+
+
+
+
+
+
+
+function lockCheckInOut() {
+  const checkIn = document.getElementById("checkInModal");
+  const checkOut = document.getElementById("checkOutModal");
+  if (checkIn) {
+    checkIn.disabled = true;
+    checkIn.classList.add("progres-lock");
+  }
+  if (checkOut) {
+    checkOut.disabled = true;
+    checkOut.classList.add("progres-lock");
+  }
+}
+
+function unlockCheckInOut() {
+  const checkIn = document.getElementById("checkInModal");
+  const checkOut = document.getElementById("checkOutModal");
+  if (checkIn) {
+    checkIn.disabled = false;
+    checkIn.classList.remove("progres-lock");
+  }
+  if (checkOut) {
+    checkOut.disabled = false;
+    checkOut.classList.remove("progres-lock");
+  }
+}
+
+function editProgres(progres) {
+  currentEditProgresId = progres.id;
+  formTitle.textContent = "Edit Progres";
+
+  lockUnitSpinner();
+
+    // 🔒 LOCK CHECK-IN & CHECK-OUT (progres berjalan / selesai)
+    if (new Date() >= new Date(progres.checkIn)) {
+      lockCheckInOut();
+    } else {
+      unlockCheckInOut();
+    }  
+  
+  // Set form values
+  unitSelectModal.value = progres.unitId;
+  
+  // Format datetime untuk input
+  const checkInDate = new Date(progres.checkIn);
+  const checkOutDate = new Date(progres.checkOut);
+  
+  const checkInStr = checkInDate.toISOString().slice(0, 16);
+  const checkOutStr = checkOutDate.toISOString().slice(0, 16);
+  
+  document.getElementById("checkInModal").value = checkInStr;
+  document.getElementById("checkOutModal").value = checkOutStr;
+  
+  // Set currency values as numbers (will be formatted on blur)
+  document.getElementById("pendapatanKotorModal").value = progres.pendapatanKotor.toString();
+  document.getElementById("pendapatanBersihModal").value = progres.pendapatanBersih.toString();
+  document.getElementById("komisiModal").value = progres.komisi.toString();
+  document.getElementById("catatanModal").value = progres.catatan || "";
+  
+  formBottomSheet.classList.add("active");
+  
+  // Trigger blur to format currency
+  setTimeout(() => {
+    document.getElementById("pendapatanKotorModal").dispatchEvent(new Event("blur"));
+    document.getElementById("pendapatanBersihModal").dispatchEvent(new Event("blur"));
+    document.getElementById("komisiModal").dispatchEvent(new Event("blur"));
+  }, 100);
+}
+
+async function handleFormSubmit() {
+  const unitId = unitSelectModal.value;
+  const checkIn = document.getElementById("checkInModal").value;
+  const checkOut = document.getElementById("checkOutModal").value;
+  const pendapatanKotor = parseCurrency(document.getElementById("pendapatanKotorModal").value);
+  const pendapatanBersih = parseCurrency(document.getElementById("pendapatanBersihModal").value);
+  const komisi = parseCurrency(document.getElementById("komisiModal").value);
+  const catatan = document.getElementById("catatanModal").value.trim();
+  
+  if (!unitId) {
+    alert("Pilih unit terlebih dahulu");
+    return;
+  }
+  
+  if (!checkIn || !checkOut) {
+    alert("Check In dan Check Out wajib diisi");
+    return;
+  }
+  
+  // Validasi opsional: jika diisi, harus > 0
+  if (pendapatanKotor < 0 || pendapatanBersih < 0 || komisi < 0) {
+    alert("Nilai pendapatan dan komisi tidak boleh negatif");
+    return;
+  }
+
+  const progresData = {
+    unitId: parseInt(unitId),
+    checkIn: new Date(checkIn).toISOString(),
+    checkOut: new Date(checkOut).toISOString(),
+    pendapatanKotor: pendapatanKotor,
+    pendapatanBersih: pendapatanBersih,
+    komisi: komisi,
+    catatan: catatan || "",
+    createdAt: currentEditProgresId ? undefined : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  if (currentEditProgresId) {
+    await updateProgresInDB(currentEditProgresId, progresData);
+  } else {
+    await addProgresToDB(progresData);
+  }
+  
+  await loadProgres();
+  
+  closeFormBottomSheet();
+  loadAllProgres();
+}
