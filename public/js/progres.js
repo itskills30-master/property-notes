@@ -506,7 +506,11 @@ async function loadAllProgres() {
               month: "long",
               year: "numeric"
             });
-            return `<span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">Check In: ${bookingCheckInStr}<br>Check Out: ${bookingCheckOutStr}</span>`;
+            let bookingNoteHtml = `<span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">Check In: ${bookingCheckInStr}<br>Check Out: ${bookingCheckOutStr}</span>`;
+            if (booking.catatan && booking.catatan.trim()) {
+              bookingNoteHtml += `<span class="progres-card-value" style="display: block; font-size: 0.85rem; margin-top: 0.5rem; font-style: italic; color: #666;">📝 ${booking.catatan}</span>`;
+            }
+            return bookingNoteHtml;
           }).join('')}
         </div>
         ` : ""}
@@ -651,6 +655,9 @@ async function loadAllProgres() {
             Check In: ${checkInDate.toLocaleString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}<br>
             Check Out: ${checkOutDate.toLocaleString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}
           </span>
+          ${progres.catatan && progres.catatan.trim() ? `
+          <span class="progres-card-value" style="display: block; font-size: 0.85rem; margin-top: 0.5rem; font-style: italic; color: #666;">📝 ${progres.catatan}</span>
+          ` : ""}
         </div>
       </div>
     `;
