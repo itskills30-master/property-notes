@@ -290,6 +290,11 @@
     background: #d4edda;
     color: #155724;
   }
+  
+  .unit-status-penuh {
+    background: #f8d7da;
+    color: #721c24;
+  }
 
   .unit-property-note {
     margin-top: 0.75rem;

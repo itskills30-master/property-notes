@@ -192,7 +192,7 @@ async function loadProperties() {
     // Tentukan class CSS berdasarkan status
     let statusClass = "unit-status-kosong"; // default
     if (p.status === "Penuh") {
-      statusClass = "unit-status-terisi";
+      statusClass = "unit-status-penuh"; // Warna merah untuk status Penuh
     } else if (p.status === "Kosong") {
       statusClass = "unit-status-kosong";
     } else if (p.status === "Booking") {
