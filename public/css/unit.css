@@ -46,14 +46,14 @@
   
   .unit-header-content {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 1rem;
   }
   
   .unit-header-title {
     flex: 1;
     margin: 0;
+    text-align: center;
   }
   
   .unit-header-title h1,
