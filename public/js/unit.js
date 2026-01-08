@@ -194,9 +194,9 @@ async function loadProperties() {
     if (p.status === "Penuh") {
       statusClass = "unit-status-penuh"; // Warna merah untuk status Penuh
     } else if (p.status === "Kosong") {
-      statusClass = "unit-status-kosong";
+      statusClass = "unit-status-kosong"; // Warna hijau untuk status Kosong
     } else if (p.status === "Booking") {
-      statusClass = "unit-status-kosong"; // Booking menggunakan style kosong untuk sementara
+      statusClass = "unit-status-booking"; // Warna kuning untuk status Booking
     }
 
     const noteHtml = p.note ? `

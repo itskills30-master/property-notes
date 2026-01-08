@@ -282,6 +282,11 @@
   }
   
   .unit-status-kosong {
+    background: #d4edda;
+    color: #155724;
+  }
+  
+  .unit-status-booking {
     background: #fff3cd;
     color: #856404;
   }
