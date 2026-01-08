@@ -373,39 +373,6 @@ async function loadAllProgres() {
     // Progres yang sudah selesai (check out sudah lewat) tidak ditampilkan
   });
   
-  // Langkah 2: Jika ada unit yang progres aktifnya sudah selesai (check out <= now)
-  // dan ada booking untuk unit yang sama, booking terdekat otomatis menjadi progres aktif baru
-  allProgres.forEach(progres => {
-    const checkOutDate = new Date(progres.checkOut);
-    // Cek jika progres ini sudah selesai (check out sudah lewat)
-    if (checkOutDate <= now) {
-      // Cek apakah unit ini punya booking yang belum aktif
-      const bookings = bookingByUnitId.get(progres.unitId);
-      if (bookings && bookings.length > 0) {
-        // Booking terdekat (check in paling awal) menjadi progres aktif baru
-        const nearestBooking = bookings.sort((a, b) => 
-          new Date(a.checkIn) - new Date(b.checkIn)
-        )[0];
-        
-        // Hapus dari bookingProgres dan tambahkan ke activeProgres
-        const bookingIndex = bookingProgres.findIndex(b => b.id === nearestBooking.id);
-        if (bookingIndex !== -1) {
-          bookingProgres.splice(bookingIndex, 1);
-          activeProgres.push(nearestBooking);
-          unitsWithActiveProgres.add(nearestBooking.unitId);
-          
-          // Hapus dari bookingByUnitId karena sekarang sudah aktif
-          const unitBookings = bookingByUnitId.get(progres.unitId);
-          if (unitBookings) {
-            const bookingIdx = unitBookings.findIndex(b => b.id === nearestBooking.id);
-            if (bookingIdx !== -1) {
-              unitBookings.splice(bookingIdx, 1);
-            }
-          }
-        }
-      }
-    }
-  });
   
   // Render progres aktif terlebih dahulu (dengan countdown)
   activeProgres.forEach(progres => {
@@ -434,11 +401,8 @@ async function loadAllProgres() {
     const unit = allUnits.find(u => u.id === progres.unitId);
     const unitName = unit ? unit.name : "Unknown";
     
-    // Calculate initial countdown
-    // Jika check in belum lewat, countdown ke check in (booking yang menjadi aktif)
-    // Jika check in sudah lewat, countdown ke check out (progres aktif normal)
-    const isBookingMode = checkInDate > now;
-    const { countdown, progress } = calculateCountdown(progres.checkIn, progres.checkOut, isBookingMode);
+    // Calculate initial countdown (progres aktif, countdown ke check out)
+    const { countdown, progress } = calculateCountdown(progres.checkIn, progres.checkOut, false);
     
     // Normalisasi nilai mata uang - pastikan null/undefined menjadi 0
     const pendapatanKotor = progres.pendapatanKotor != null ? Number(progres.pendapatanKotor) || 0 : 0;
@@ -492,7 +456,6 @@ async function loadAllProgres() {
         ` : ""}
         ${bookingByUnitId.has(progres.unitId) ? `
         <div class="progres-card-item progres-booking-note">
-          <span class="progres-card-value" style="font-weight: 700; margin-bottom: 0.5rem;">📋 Booking</span>
           ${bookingByUnitId.get(progres.unitId).map(booking => {
             const bookingCheckIn = new Date(booking.checkIn);
             const bookingCheckOut = new Date(booking.checkOut);
@@ -506,7 +469,9 @@ async function loadAllProgres() {
               month: "long",
               year: "numeric"
             });
-            let bookingNoteHtml = `<span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">Check In: ${bookingCheckInStr}<br>Check Out: ${bookingCheckOutStr}</span>`;
+            let bookingNoteHtml = `<span class="progres-card-value" style="font-weight: 700; margin-bottom: 0.5rem; display: block;">📋 Booking</span>`;
+            bookingNoteHtml += `<span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">Check In: ${bookingCheckInStr}</span>`;
+            bookingNoteHtml += `<span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">Check Out: ${bookingCheckOutStr}</span>`;
             if (booking.catatan && booking.catatan.trim()) {
               bookingNoteHtml += `<span class="progres-card-value" style="display: block; font-size: 0.85rem; margin-top: 0.5rem; font-style: italic; color: #666;">📝 ${booking.catatan}</span>`;
             }
@@ -546,20 +511,16 @@ async function loadAllProgres() {
       }
     });
     
-    // Setup countdown interval
+    // Setup countdown interval untuk progres aktif (countdown ke check out)
     // Update every second for accuracy
-    // Countdown akan otomatis berubah dari "ke check in" menjadi "ke check out" saat check in tiba
     const intervalId = setInterval(() => {
-      const checkInDate = new Date(progres.checkIn);
-      const now = new Date();
-      const isBookingMode = checkInDate > now;
-      updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId, isBookingMode);
+      updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId, false);
     }, 1000);
     
     countdownIntervals.set(progres.id, intervalId);
     
     // Initial update
-    updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId, isBookingMode);
+    updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId, false);
     
     progresList.appendChild(card);
   });
