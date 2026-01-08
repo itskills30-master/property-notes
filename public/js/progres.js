@@ -105,7 +105,7 @@ function calculateCountdown(checkIn, checkOut) {
 }
 
 // Update countdown for a specific card
-function updateCountdown(cardId, checkIn, checkOut) {
+async function updateCountdown(cardId, checkIn, checkOut, unitId = null) {
   const countdownEl = document.getElementById(`countdown-${cardId}`);
   const progressBarEl = document.getElementById(`progress-bar-${cardId}`);
   
@@ -119,8 +119,34 @@ function updateCountdown(cardId, checkIn, checkOut) {
   // Change color if progress is 100%
   if (progress >= 100) {
     progressBarEl.classList.add("completed");
+    
+    // Update unit status jika progres sudah selesai (100%)
+    // Cari unitId dari progres jika tidak diberikan
+    if (!unitId) {
+      const progres = allProgres.find(p => p.id === cardId);
+      if (progres) {
+        unitId = progres.unitId;
+      }
+    }
+    
+    // Update status unit jika unitId ditemukan
+    if (unitId && typeof updateUnitStatusByProgres === 'function') {
+      await updateUnitStatusByProgres(unitId);
+    }
   } else {
     progressBarEl.classList.remove("completed");
+    
+    // Update unit status menjadi "Penuh" jika progres aktif
+    if (!unitId) {
+      const progres = allProgres.find(p => p.id === cardId);
+      if (progres) {
+        unitId = progres.unitId;
+      }
+    }
+    
+    if (unitId && typeof updateUnitStatusByProgres === 'function') {
+      await updateUnitStatusByProgres(unitId);
+    }
   }
 }
 
@@ -372,21 +398,29 @@ async function loadAllProgres() {
           clearInterval(countdownIntervals.get(progres.id));
           countdownIntervals.delete(progres.id);
         }
+        
+        const unitIdToUpdate = progres.unitId;
         await deleteProgresFromDB(progres.id);
         await loadProgres();
+        
+        // Update status unit setelah delete progres
+        if (typeof updateUnitStatusByProgres === 'function') {
+          await updateUnitStatusByProgres(unitIdToUpdate);
+        }
+        
         loadAllProgres();
       }
     });
     
     // Setup countdown interval (update every second for accuracy)
     const intervalId = setInterval(() => {
-      updateCountdown(progres.id, progres.checkIn, progres.checkOut);
+      updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId);
     }, 1000); // Update every second
     
     countdownIntervals.set(progres.id, intervalId);
     
     // Initial update
-    updateCountdown(progres.id, progres.checkIn, progres.checkOut);
+    updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId);
     
     progresList.appendChild(card);
   });
@@ -555,6 +589,12 @@ async function handleFormSubmit() {
     }
     
     await loadProgres();
+    
+    // Update status unit berdasarkan progres
+    if (typeof updateUnitStatusByProgres === 'function') {
+      await updateUnitStatusByProgres(parseInt(unitId));
+    }
+    
     closeFormBottomSheet();
     loadAllProgres();
   } catch (error) {

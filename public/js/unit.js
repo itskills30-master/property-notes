@@ -134,7 +134,33 @@ form.addEventListener("submit", async (e) => {
   loadProperties();
 });
 
+// Update status semua unit berdasarkan progres
+// Menggunakan fungsi updateUnitStatusByProgres dari db.js
+async function updateAllUnitsStatusByProgres() {
+  try {
+    const allUnits = await getAllPropertiesFromDB();
+    
+    // Update status setiap unit
+    for (const unit of allUnits) {
+      // Skip jika status adalah "Booking" (akan di-handle di updateUnitStatusByProgres)
+      if (unit.status === "Booking") {
+        continue;
+      }
+      
+      // Update status unit berdasarkan progres
+      if (typeof updateUnitStatusByProgres === 'function') {
+        await updateUnitStatusByProgres(unit.id);
+      }
+    }
+  } catch (error) {
+    console.error("Error updating all units status:", error);
+  }
+}
+
 async function loadProperties() {
+  // Update status semua unit berdasarkan progres sebelum load
+  await updateAllUnitsStatusByProgres();
+  
   allProperties = await getAllPropertiesFromDB();
 
   // Filter berdasarkan jenis properti
@@ -163,8 +189,15 @@ async function loadProperties() {
     const card = document.createElement("div");
     card.className = "unit-property-card";
 
-    const statusClass =
-      p.status === "Kosong" ? "unit-status-kosong" : "unit-status-terisi";
+    // Tentukan class CSS berdasarkan status
+    let statusClass = "unit-status-kosong"; // default
+    if (p.status === "Penuh") {
+      statusClass = "unit-status-terisi";
+    } else if (p.status === "Kosong") {
+      statusClass = "unit-status-kosong";
+    } else if (p.status === "Booking") {
+      statusClass = "unit-status-kosong"; // Booking menggunakan style kosong untuk sementara
+    }
 
     const noteHtml = p.note ? `
       <div class="unit-property-note">

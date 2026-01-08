@@ -206,3 +206,41 @@ function updateProgresInDB(id, updates) {
     request.onerror = () => reject(false);
   });
 }
+
+// Update status unit berdasarkan progres
+// Logika: Jika ada progres aktif (belum check out), status = "Penuh"
+//         Jika semua progres selesai atau tidak ada progres, status = "Kosong"
+//         Status "Booking" tidak diubah otomatis
+async function updateUnitStatusByProgres(unitId) {
+  try {
+    const progresList = await getProgresByUnitId(unitId);
+    const now = new Date();
+    
+    // Cek apakah ada progres yang masih aktif (belum check out)
+    const hasActiveProgres = progresList.some(progres => {
+      const checkOutDate = new Date(progres.checkOut);
+      return checkOutDate > now; // Masih aktif jika check out belum lewat
+    });
+    
+    // Dapatkan unit dari database
+    const allUnits = await getAllPropertiesFromDB();
+    const unit = allUnits.find(u => u.id === unitId);
+    
+    if (!unit) return;
+    
+    // Jangan ubah status jika status adalah "Booking" (pending)
+    if (unit.status === "Booking") {
+      return;
+    }
+    
+    // Update status berdasarkan progres
+    const newStatus = hasActiveProgres ? "Penuh" : "Kosong";
+    
+    // Hanya update jika status berbeda
+    if (unit.status !== newStatus) {
+      await updatePropertyInDB(unitId, { status: newStatus });
+    }
+  } catch (error) {
+    console.error("Error updating unit status:", error);
+  }
+}
