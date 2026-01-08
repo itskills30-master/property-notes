@@ -208,18 +208,26 @@ function updateProgresInDB(id, updates) {
 }
 
 // Update status unit berdasarkan progres
-// Logika: Jika ada progres aktif (belum check out), status = "Penuh"
-//         Jika semua progres selesai atau tidak ada progres, status = "Kosong"
-//         Status "Booking" tidak diubah otomatis
+// Logika: 
+// - Jika ada progres aktif (check out belum lewat) → "Penuh" (prioritas tertinggi)
+// - Jika tidak ada progres aktif tapi ada booking (check in di masa depan) → "Booking"
+// - Jika tidak ada keduanya → "Kosong"
 async function updateUnitStatusByProgres(unitId) {
   try {
     const progresList = await getProgresByUnitId(unitId);
     const now = new Date();
     
-    // Cek apakah ada progres yang masih aktif (belum check out)
+    // Cek progres aktif: check in sudah lewat dan check out belum lewat
     const hasActiveProgres = progresList.some(progres => {
+      const checkInDate = new Date(progres.checkIn);
       const checkOutDate = new Date(progres.checkOut);
-      return checkOutDate > now; // Masih aktif jika check out belum lewat
+      return checkInDate <= now && checkOutDate > now;
+    });
+    
+    // Cek booking: check in di masa depan
+    const hasBooking = progresList.some(progres => {
+      const checkInDate = new Date(progres.checkIn);
+      return checkInDate > now;
     });
     
     // Dapatkan unit dari database
@@ -228,13 +236,18 @@ async function updateUnitStatusByProgres(unitId) {
     
     if (!unit) return;
     
-    // Jangan ubah status jika status adalah "Booking" (pending)
-    if (unit.status === "Booking") {
-      return;
+    // Tentukan status baru berdasarkan logika
+    let newStatus;
+    if (hasActiveProgres) {
+      // Prioritas 1: Ada progres aktif → "Penuh"
+      newStatus = "Penuh";
+    } else if (hasBooking) {
+      // Prioritas 2: Ada booking → "Booking"
+      newStatus = "Booking";
+    } else {
+      // Prioritas 3: Tidak ada keduanya → "Kosong"
+      newStatus = "Kosong";
     }
-    
-    // Update status berdasarkan progres
-    const newStatus = hasActiveProgres ? "Penuh" : "Kosong";
     
     // Hanya update jika status berbeda
     if (unit.status !== newStatus) {

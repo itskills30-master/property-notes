@@ -408,6 +408,24 @@ body {
   font-weight: 600;
 }
 
+.progres-booking-note {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fff3cd;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid #ffc107;
+}
+
+.progres-booking-note .progres-card-value {
+  color: #856404;
+  font-size: 0.95rem;
+}
+
+.progres-card-booking {
+  opacity: 0.95;
+  border-left: 4px solid #ffc107;
+}
+
 /* COUNTDOWN & PROGRESS BAR - MOBILE */
 
 .progres-countdown-container {

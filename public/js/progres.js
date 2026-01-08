@@ -120,7 +120,7 @@ async function updateCountdown(cardId, checkIn, checkOut, unitId = null) {
   if (progress >= 100) {
     progressBarEl.classList.add("completed");
     
-    // Update unit status jika progres sudah selesai (100%)
+    // Update unit status jika progres sudah selesai (100% / check out)
     // Cari unitId dari progres jika tidak diberikan
     if (!unitId) {
       const progres = allProgres.find(p => p.id === cardId);
@@ -129,7 +129,8 @@ async function updateCountdown(cardId, checkIn, checkOut, unitId = null) {
       }
     }
     
-    // Update status unit jika unitId ditemukan
+    // Update status unit setelah check out selesai
+    // Status akan berubah dari "Penuh" ke "Booking" jika ada booking, atau "Kosong" jika tidak ada
     if (unitId && typeof updateUnitStatusByProgres === 'function') {
       await updateUnitStatusByProgres(unitId);
     }
@@ -137,15 +138,30 @@ async function updateCountdown(cardId, checkIn, checkOut, unitId = null) {
     progressBarEl.classList.remove("completed");
     
     // Update unit status menjadi "Penuh" jika progres aktif
+    // Hanya update jika check in sudah lewat (bukan booking)
     if (!unitId) {
       const progres = allProgres.find(p => p.id === cardId);
       if (progres) {
         unitId = progres.unitId;
+        const checkInDate = new Date(progres.checkIn);
+        const now = new Date();
+        
+        // Hanya update status jika check in sudah lewat (progres aktif, bukan booking)
+        if (checkInDate <= now && unitId && typeof updateUnitStatusByProgres === 'function') {
+          await updateUnitStatusByProgres(unitId);
+        }
       }
-    }
-    
-    if (unitId && typeof updateUnitStatusByProgres === 'function') {
-      await updateUnitStatusByProgres(unitId);
+    } else {
+      const progres = allProgres.find(p => p.id === cardId);
+      if (progres) {
+        const checkInDate = new Date(progres.checkIn);
+        const now = new Date();
+        
+        // Hanya update status jika check in sudah lewat (progres aktif, bukan booking)
+        if (checkInDate <= now && typeof updateUnitStatusByProgres === 'function') {
+          await updateUnitStatusByProgres(unitId);
+        }
+      }
     }
   }
 }
@@ -300,8 +316,30 @@ async function loadAllProgres() {
   progresList.style.display = "block";
   emptyState.style.display = "none";
   const currency = getCurrentCurrency();
+  const now = new Date();
+  
+  // Pisahkan progres aktif dan booking
+  // Aktif: check in sudah lewat atau sekarang, check out belum lewat
+  // Booking: check in belum lewat (masa depan)
+  const activeProgres = [];
+  const bookingProgres = [];
   
   allProgres.forEach(progres => {
+    const checkInDate = new Date(progres.checkIn);
+    const checkOutDate = new Date(progres.checkOut);
+    
+    if (checkInDate > now) {
+      // Booking (check in di masa depan)
+      bookingProgres.push(progres);
+    } else if (checkOutDate > now) {
+      // Aktif (sedang berjalan)
+      activeProgres.push(progres);
+    }
+    // Progres yang sudah selesai (check out sudah lewat) tidak ditampilkan
+  });
+  
+  // Render progres aktif terlebih dahulu (dengan countdown)
+  activeProgres.forEach(progres => {
     const card = document.createElement("div");
     card.className = "progres-card";
     
@@ -412,15 +450,134 @@ async function loadAllProgres() {
       }
     });
     
-    // Setup countdown interval (update every second for accuracy)
+    // Setup countdown interval hanya untuk progres aktif (bukan booking)
+    // Update every second for accuracy
     const intervalId = setInterval(() => {
       updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId);
-    }, 1000); // Update every second
+    }, 1000);
     
     countdownIntervals.set(progres.id, intervalId);
     
     // Initial update
     updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId);
+    
+    progresList.appendChild(card);
+  });
+  
+  // Render booking progres di bawah (tanpa countdown interval, hanya note)
+  bookingProgres.forEach(progres => {
+    const card = document.createElement("div");
+    card.className = "progres-card progres-card-booking";
+    
+    const checkInDate = new Date(progres.checkIn);
+    const checkOutDate = new Date(progres.checkOut);
+    
+    // Format tanggal untuk display (dengan jam)
+    const checkInStrFull = checkInDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    
+    const checkOutStrFull = checkOutDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    
+    // Format tanggal untuk booking note (tanpa jam)
+    const checkInStrDate = checkInDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric"
+    });
+    
+    const checkOutStrDate = checkOutDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric"
+    });
+    
+    const unit = allUnits.find(u => u.id === progres.unitId);
+    const unitName = unit ? unit.name : "Unknown";
+    
+    // Normalisasi nilai mata uang
+    const pendapatanKotor = progres.pendapatanKotor != null ? Number(progres.pendapatanKotor) || 0 : 0;
+    const pendapatanBersih = progres.pendapatanBersih != null ? Number(progres.pendapatanBersih) || 0 : 0;
+    const komisi = progres.komisi != null ? Number(progres.komisi) || 0 : 0;
+    
+    card.innerHTML = `
+      <div class="progres-card-header">
+        <h3 class="progres-card-title">${unitName}</h3>
+        <div class="progres-card-actions">
+          <button class="progres-card-edit" data-id="${progres.id}" aria-label="Edit">
+            ✏️
+          </button>
+          <button class="progres-card-delete" data-id="${progres.id}" aria-label="Hapus">
+            🗑️
+          </button>
+        </div>
+      </div>
+      <div class="progres-card-body">
+        <div class="progres-card-item">
+          <span class="progres-card-label">Check In:</span>
+          <span class="progres-card-value">📅 ${checkInStrFull}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Check Out:</span>
+          <span class="progres-card-value">🕐 ${checkOutStrFull}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Pendapatan Kotor:</span>
+          <span class="progres-card-value">${formatCurrency(pendapatanKotor, currency)}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Pendapatan Bersih:</span>
+          <span class="progres-card-value">${formatCurrency(pendapatanBersih, currency)}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Komisi:</span>
+          <span class="progres-card-value">${formatCurrency(komisi, currency)}</span>
+        </div>
+        ${progres.catatan ? `
+        <div class="progres-card-item">
+          <span class="progres-card-label">Catatan:</span>
+          <span class="progres-card-value">${progres.catatan}</span>
+        </div>
+        ` : ""}
+        <div class="progres-card-item progres-booking-note">
+          <span class="progres-card-label">Status:</span>
+          <span class="progres-card-value">📋 <strong>Booking</strong>, Check In: ${checkInStrDate}, Check Out: ${checkOutStrDate}</span>
+        </div>
+      </div>
+    `;
+    
+    // Edit button
+    const editBtn = card.querySelector(".progres-card-edit");
+    editBtn.addEventListener("click", () => {
+      editProgres(progres);
+    });
+    
+    // Delete button
+    const deleteBtn = card.querySelector(".progres-card-delete");
+    deleteBtn.addEventListener("click", async () => {
+      if (confirm("Apakah Anda yakin ingin menghapus data booking ini?")) {
+        const unitIdToUpdate = progres.unitId;
+        await deleteProgresFromDB(progres.id);
+        await loadProgres();
+        
+        // Update status unit setelah delete booking
+        if (typeof updateUnitStatusByProgres === 'function') {
+          await updateUnitStatusByProgres(unitIdToUpdate);
+        }
+        
+        loadAllProgres();
+      }
+    });
     
     progresList.appendChild(card);
   });
