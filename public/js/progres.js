@@ -352,7 +352,7 @@ async function loadAllProgres() {
   const bookingByUnitId = new Map(); // Map untuk menyimpan booking per unit
   const unitsWithActiveProgres = new Set(); // Track unit yang punya progres aktif
   
-  // Langkah 1: Identifikasi semua progres aktif dan booking
+  // Identifikasi semua progres aktif dan booking
   allProgres.forEach(progres => {
     const checkInDate = new Date(progres.checkIn);
     const checkOutDate = new Date(progres.checkOut);
@@ -525,6 +525,126 @@ async function loadAllProgres() {
     progresList.appendChild(card);
   });
   
+  
+  // Tampilkan card untuk unit yang hanya memiliki booking (tidak ada progres aktif)
+  const unitsYangSudahAdaCard = new Set(activeProgres.map(p => p.unitId));
+  const standaloneBookings = bookingProgres.filter(p => !unitsYangSudahAdaCard.has(p.unitId));
+
+  standaloneBookings.forEach(progres => {
+    const card = document.createElement("div");
+    card.className = "progres-card";
+    
+    const checkInDate = new Date(progres.checkIn);
+    const checkOutDate = new Date(progres.checkOut);
+    
+    const checkInStr = checkInDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    
+    const checkOutStr = checkOutDate.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    
+    const unit = allUnits.find(u => u.id === progres.unitId);
+    const unitName = unit ? unit.name : "Unknown";
+    
+    // Countdown untuk booking (menuju check in)
+    const { countdown, progress } = calculateCountdown(progres.checkIn, progres.checkOut, true);
+    
+    const pendapatanKotor = progres.pendapatanKotor != null ? Number(progres.pendapatanKotor) || 0 : 0;
+    const pendapatanBersih = progres.pendapatanBersih != null ? Number(progres.pendapatanBersih) || 0 : 0;
+    const komisi = progres.komisi != null ? Number(progres.komisi) || 0 : 0;
+    
+    card.innerHTML = `
+      <div class="progres-card-header">
+        <h3 class="progres-card-title">${unitName}</h3>
+        <div class="progres-card-actions">
+          <button class="progres-card-edit" data-id="${progres.id}" aria-label="Edit">
+            ✏️
+          </button>
+          <button class="progres-card-delete" data-id="${progres.id}" aria-label="Hapus">
+            🗑️
+          </button>
+        </div>
+      </div>
+      <div class="progres-card-body">
+        <div class="progres-countdown-container">
+          <div class="progres-countdown" id="countdown-${progres.id}">${countdown}</div>
+          <div class="progres-progress-bar-container">
+            <div class="progres-progress-bar" id="progress-bar-${progres.id}" style="width: ${progress}%"></div>
+          </div>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Check In:</span>
+          <span class="progres-card-value">📅 ${checkInStr}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Check Out:</span>
+          <span class="progres-card-value">🕐 ${checkOutStr}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Pendapatan Kotor:</span>
+          <span class="progres-card-value">${formatCurrency(pendapatanKotor, currency)}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Pendapatan Bersih:</span>
+          <span class="progres-card-value">${formatCurrency(pendapatanBersih, currency)}</span>
+        </div>
+        <div class="progres-card-item">
+          <span class="progres-card-label">Komisi:</span>
+          <span class="progres-card-value">${formatCurrency(komisi, currency)}</span>
+        </div>
+        ${progres.catatan ? `
+        <div class="progres-card-item">
+          <span class="progres-card-label">Catatan:</span>
+          <span class="progres-card-value">${progres.catatan}</span>
+        </div>
+        ` : ""}
+      </div>
+    `;
+
+    // Edit button
+    const editBtn = card.querySelector(".progres-card-edit");
+    editBtn.addEventListener("click", () => {
+      editProgres(progres);
+    });
+    
+    // Delete button
+    const deleteBtn = card.querySelector(".progres-card-delete");
+    deleteBtn.addEventListener("click", async () => {
+      if (confirm("Apakah Anda yakin ingin menghapus data booking ini?")) {
+        const unitIdToUpdate = progres.unitId;
+        await deleteProgresFromDB(progres.id);
+        await loadProgres();
+        
+        if (typeof updateUnitStatusByProgres === 'function') {
+          await updateUnitStatusByProgres(unitIdToUpdate);
+        }
+        
+        loadAllProgres();
+      }
+    });
+
+    // Countdown interval untuk booking (menuju check in)
+    const intervalId = setInterval(() => {
+      updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId, true);
+    }, 1000);
+
+    countdownIntervals.set(progres.id, intervalId);
+
+    // Initial update
+    updateCountdown(progres.id, progres.checkIn, progres.checkOut, progres.unitId, true);
+
+    progresList.appendChild(card);
+  });
   
   // Clean up intervals for cards that no longer exist
   const currentProgresIds = new Set(allProgres.map(p => p.id));
