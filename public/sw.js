@@ -1,4 +1,4 @@
-const CACHE_NAME = "property-notes-v21"; // 🔥 GANTI SETIAP UPDATE
+const CACHE_NAME = "property-notes-v22"; // 🔥 GANTI SETIAP UPDATE
 const ASSETS = [
   "/",
   "/index.html",
