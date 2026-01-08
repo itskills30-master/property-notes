@@ -1,5 +1,6 @@
 const DB_NAME = "property_notes_db";
-const DB_VERSION = 2;
+// Bump versi untuk memicu onupgradeneeded dan memastikan object store baru dibuat
+const DB_VERSION = 3;
 const STORE_NAME = "properties";
 const PROGRES_STORE_NAME = "progres";
 

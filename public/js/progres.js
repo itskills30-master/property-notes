@@ -21,17 +21,25 @@ let countdownIntervals = new Map(); // Store intervals for cleanup
 
 // Format mata uang mengikuti pengaturan global
 function formatCurrency(value, currency = getCurrentCurrency()) {
-  if (!value || value === "" || value === 0) return "";
-  
+  // Normalisasi nilai - pastikan selalu number
   let numValue;
-  if (typeof value === "number") {
+  
+  // Jika value null, undefined, atau string kosong, set ke 0
+  if (value === null || value === undefined || value === "") {
+    numValue = 0;
+  } else if (typeof value === "number") {
     numValue = value;
   } else {
     numValue = parseFloat(value.toString().replace(/[^\d]/g, ""));
   }
   
-  if (isNaN(numValue) || numValue === 0) return "";
+  // Jika tidak valid atau NaN, set ke 0
+  if (isNaN(numValue) || numValue === null || numValue === undefined) {
+    numValue = 0;
+  }
 
+  // Pastikan nilai selalu ditampilkan, termasuk 0
+  // Nilai 0 akan ditampilkan sebagai "Rp 0" atau "$0"
   if (currency === "id") {
     return `Rp ${numValue.toLocaleString("id-ID")}`;
   } else {
@@ -296,6 +304,11 @@ async function loadAllProgres() {
     // Calculate initial countdown
     const { countdown, progress } = calculateCountdown(progres.checkIn, progres.checkOut);
     
+    // Normalisasi nilai mata uang - pastikan null/undefined menjadi 0
+    const pendapatanKotor = progres.pendapatanKotor != null ? Number(progres.pendapatanKotor) || 0 : 0;
+    const pendapatanBersih = progres.pendapatanBersih != null ? Number(progres.pendapatanBersih) || 0 : 0;
+    const komisi = progres.komisi != null ? Number(progres.komisi) || 0 : 0;
+    
     card.innerHTML = `
       <div class="progres-card-header">
         <h3 class="progres-card-title">${unitName}</h3>
@@ -325,15 +338,15 @@ async function loadAllProgres() {
         </div>
         <div class="progres-card-item">
           <span class="progres-card-label">Pendapatan Kotor:</span>
-          <span class="progres-card-value">${formatCurrency(progres.pendapatanKotor, currency)}</span>
+          <span class="progres-card-value">${formatCurrency(pendapatanKotor, currency)}</span>
         </div>
         <div class="progres-card-item">
           <span class="progres-card-label">Pendapatan Bersih:</span>
-          <span class="progres-card-value">${formatCurrency(progres.pendapatanBersih, currency)}</span>
+          <span class="progres-card-value">${formatCurrency(pendapatanBersih, currency)}</span>
         </div>
         <div class="progres-card-item">
           <span class="progres-card-label">Komisi:</span>
-          <span class="progres-card-value">${formatCurrency(progres.komisi, currency)}</span>
+          <span class="progres-card-value">${formatCurrency(komisi, currency)}</span>
         </div>
         ${progres.catatan ? `
         <div class="progres-card-item">
@@ -487,9 +500,23 @@ async function handleFormSubmit() {
   const unitId = unitSelectModal.value;
   const checkIn = document.getElementById("checkInModal").value;
   const checkOut = document.getElementById("checkOutModal").value;
-  const pendapatanKotor = parseCurrency(document.getElementById("pendapatanKotorModal").value);
-  const pendapatanBersih = parseCurrency(document.getElementById("pendapatanBersihModal").value);
-  const komisi = parseCurrency(document.getElementById("komisiModal").value);
+  
+  // Parse currency values - handle empty or formatted values
+  // Jika kosong atau tidak valid, langsung set ke 0
+  const pendapatanKotorInput = document.getElementById("pendapatanKotorModal").value || "";
+  const pendapatanBersihInput = document.getElementById("pendapatanBersihModal").value || "";
+  const komisiInput = document.getElementById("komisiModal").value || "";
+  
+  // Parse dan pastikan selalu angka (0 jika kosong/tidak valid)
+  // Gunakan Math.max(0, ...) untuk memastikan minimal 0 dan tidak ada NaN/null/undefined
+  let pendapatanKotor = parseCurrency(pendapatanKotorInput);
+  let pendapatanBersih = parseCurrency(pendapatanBersihInput);
+  let komisi = parseCurrency(komisiInput);
+  
+  // Pastikan selalu number dan minimal 0
+  pendapatanKotor = isNaN(pendapatanKotor) || pendapatanKotor === null || pendapatanKotor === undefined ? 0 : Math.max(0, Number(pendapatanKotor));
+  pendapatanBersih = isNaN(pendapatanBersih) || pendapatanBersih === null || pendapatanBersih === undefined ? 0 : Math.max(0, Number(pendapatanBersih));
+  komisi = isNaN(komisi) || komisi === null || komisi === undefined ? 0 : Math.max(0, Number(komisi));
   const catatan = document.getElementById("catatanModal").value.trim();
   
   if (!unitId) {
@@ -502,7 +529,7 @@ async function handleFormSubmit() {
     return;
   }
   
-  // Validasi opsional: jika diisi, harus > 0
+  // Validasi opsional: jika diisi, harus >= 0 (boleh 0 atau positif)
   if (pendapatanKotor < 0 || pendapatanBersih < 0 || komisi < 0) {
     alert("Nilai pendapatan dan komisi tidak boleh negatif");
     return;
@@ -512,22 +539,26 @@ async function handleFormSubmit() {
     unitId: parseInt(unitId),
     checkIn: new Date(checkIn).toISOString(),
     checkOut: new Date(checkOut).toISOString(),
-    pendapatanKotor: pendapatanKotor,
-    pendapatanBersih: pendapatanBersih,
-    komisi: komisi,
+    pendapatanKotor: pendapatanKotor, // Sudah dipastikan 0 jika kosong
+    pendapatanBersih: pendapatanBersih, // Sudah dipastikan 0 jika kosong
+    komisi: komisi, // Sudah dipastikan 0 jika kosong
     catatan: catatan || "",
     createdAt: currentEditProgresId ? undefined : new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
   
-  if (currentEditProgresId) {
-    await updateProgresInDB(currentEditProgresId, progresData);
-  } else {
-    await addProgresToDB(progresData);
+  try {
+    if (currentEditProgresId) {
+      await updateProgresInDB(currentEditProgresId, progresData);
+    } else {
+      await addProgresToDB(progresData);
+    }
+    
+    await loadProgres();
+    closeFormBottomSheet();
+    loadAllProgres();
+  } catch (error) {
+    console.error("Error saving progres:", error);
+    alert("Terjadi kesalahan saat menyimpan data. Silakan coba lagi.");
   }
-  
-  await loadProgres();
-  
-  closeFormBottomSheet();
-  loadAllProgres();
 }
