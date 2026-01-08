@@ -419,6 +419,7 @@ body {
 .progres-booking-note .progres-card-value {
   color: #856404;
   font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .progres-card-booking {

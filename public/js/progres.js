@@ -323,6 +323,7 @@ async function loadAllProgres() {
   // Booking: check in belum lewat (masa depan)
   const activeProgres = [];
   const bookingProgres = [];
+  const bookingByUnitId = new Map(); // Map untuk menyimpan booking per unit
   
   allProgres.forEach(progres => {
     const checkInDate = new Date(progres.checkIn);
@@ -331,6 +332,11 @@ async function loadAllProgres() {
     if (checkInDate > now) {
       // Booking (check in di masa depan)
       bookingProgres.push(progres);
+      // Simpan booking per unit untuk referensi
+      if (!bookingByUnitId.has(progres.unitId)) {
+        bookingByUnitId.set(progres.unitId, []);
+      }
+      bookingByUnitId.get(progres.unitId).push(progres);
     } else if (checkOutDate > now) {
       // Aktif (sedang berjalan)
       activeProgres.push(progres);
@@ -418,6 +424,26 @@ async function loadAllProgres() {
           <span class="progres-card-value">${progres.catatan}</span>
         </div>
         ` : ""}
+        ${bookingByUnitId.has(progres.unitId) ? `
+        <div class="progres-card-item progres-booking-note">
+          <span class="progres-card-value" style="font-weight: 700; margin-bottom: 0.5rem;">📋 Booking</span>
+          ${bookingByUnitId.get(progres.unitId).map(booking => {
+            const bookingCheckIn = new Date(booking.checkIn);
+            const bookingCheckOut = new Date(booking.checkOut);
+            const bookingCheckInStr = bookingCheckIn.toLocaleString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric"
+            });
+            const bookingCheckOutStr = bookingCheckOut.toLocaleString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric"
+            });
+            return `<span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">Check In: ${bookingCheckInStr}<br>Check Out: ${bookingCheckOutStr}</span>`;
+          }).join('')}
+        </div>
+        ` : ""}
       </div>
     `;
     
@@ -464,8 +490,12 @@ async function loadAllProgres() {
     progresList.appendChild(card);
   });
   
-  // Render booking progres di bawah (tanpa countdown interval, hanya note)
-  bookingProgres.forEach(progres => {
+  // Render booking progres yang TIDAK memiliki progres aktif (unit hanya punya booking)
+  // Booking yang unit-nya sudah punya progres aktif akan ditampilkan sebagai note di card progres aktif
+  const unitsWithActiveProgres = new Set(activeProgres.map(p => p.unitId));
+  const standaloneBookings = bookingProgres.filter(progres => !unitsWithActiveProgres.has(progres.unitId));
+  
+  standaloneBookings.forEach(progres => {
     const card = document.createElement("div");
     card.className = "progres-card progres-card-booking";
     
@@ -487,19 +517,6 @@ async function loadAllProgres() {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit"
-    });
-    
-    // Format tanggal untuk booking note (tanpa jam)
-    const checkInStrDate = checkInDate.toLocaleString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric"
-    });
-    
-    const checkOutStrDate = checkOutDate.toLocaleString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric"
     });
     
     const unit = allUnits.find(u => u.id === progres.unitId);
@@ -550,8 +567,11 @@ async function loadAllProgres() {
         </div>
         ` : ""}
         <div class="progres-card-item progres-booking-note">
-          <span class="progres-card-label">Status:</span>
-          <span class="progres-card-value">📋 <strong>Booking</strong>, Check In: ${checkInStrDate}, Check Out: ${checkOutStrDate}</span>
+          <span class="progres-card-value" style="font-weight: 700; margin-bottom: 0.5rem;">📋 Booking</span>
+          <span class="progres-card-value" style="display: block; font-size: 0.9rem; margin-top: 0.25rem;">
+            Check In: ${checkInDate.toLocaleString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}<br>
+            Check Out: ${checkOutDate.toLocaleString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}
+          </span>
         </div>
       </div>
     `;
